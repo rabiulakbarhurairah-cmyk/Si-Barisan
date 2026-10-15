@@ -861,3 +861,195 @@ td small{
     grid-template-columns: repeat(2, auto);
   }
 }
+
+/*=============== LOGIN PAGE ===============*/
+.login{
+  display: none;
+  position: relative;
+  min-height: 100svh;
+  place-items: center;
+  padding: 2rem 1rem;
+  color: #fff;
+  background: #0b1f45;
+  overflow: hidden;
+}
+
+body.locked .login{
+  display: grid;
+}
+
+body.locked .header,
+body.locked main,
+body.locked .footer,
+body.locked .scrollup{
+  display: none;
+}
+
+.login__bg{
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.login__blur{
+  position: absolute;
+  inset: 0;
+  background: rgba(11, 31, 69, .6);
+  backdrop-filter: blur(30px);
+}
+
+.login__theme{
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 2;
+  display: flex;
+  font-size: 1.3rem;
+  color: #fff;
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.login__card{
+  position: relative;
+  width: min(420px, 100%);
+  padding: 2rem 1.5rem;
+  display: grid;
+  gap: 1.2rem;
+  border-radius: 1.2rem;
+  background: var(--bg);
+  color: var(--t);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+}
+
+.login__brand{
+  display: grid;
+  justify-items: center;
+  gap: .5rem;
+  text-align: center;
+}
+
+.login__logo{
+  width: 5rem;
+  height: 5rem;
+  padding: .2rem;
+  border-radius: .8rem;
+  object-fit: contain;
+  background: #fff;
+  border: 2px solid var(--c);
+}
+
+.login__title{
+  font-size: 1.4rem;
+  color: var(--d);
+}
+
+[data-theme=dark] .login__title{
+  color: var(--g2);
+}
+
+.login__subtitle{
+  font-size: .85rem;
+  line-height: 1.5;
+  color: var(--t2);
+}
+
+.login__form{
+  display: grid;
+  gap: 1rem;
+}
+
+.login__field{
+  display: grid;
+  gap: .3rem;
+  font-weight: 600;
+  font-size: .85rem;
+}
+
+.login__input{
+  width: 100%;
+  padding: .9rem 1rem;
+  border: 1px solid rgba(128, 128, 128, .35);
+  border-radius: .5rem;
+  background: var(--card);
+  color: var(--t);
+  font: inherit;
+}
+
+.login__pass{
+  position: relative;
+}
+
+.login__pass .login__input{
+  padding-right: 3rem;
+}
+
+.login__eye{
+  position: absolute;
+  top: 50%;
+  right: .4rem;
+  translate: 0 -50%;
+  display: flex;
+  padding: .5rem;
+  color: var(--t2);
+  background: none;
+  border: 0;
+  cursor: pointer;
+}
+
+.login__remember{
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  font-size: .85rem;
+  font-weight: 500;
+}
+
+.login__remember input{
+  width: 1rem;
+  height: 1rem;
+  accent-color: var(--c);
+}
+
+.login__button{
+  justify-content: center;
+  padding-block: 1rem;
+}
+
+.login__button[disabled]{
+  opacity: .6;
+  cursor: wait;
+}
+
+.login__msg{
+  min-height: 1.2rem;
+  font-size: .85rem;
+  text-align: center;
+}
+
+.login__help{
+  font-size: .8rem;
+  text-align: center;
+  color: var(--t2);
+}
+
+/*=============== HEADER USER ===============*/
+.nav__user{
+  display: none;
+  max-width: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: .8rem;
+  line-height: 1.2;
+  opacity: .9;
+}
+
+@media (min-width: 768px){
+  .nav__user{
+    display: block;
+  }
+}
