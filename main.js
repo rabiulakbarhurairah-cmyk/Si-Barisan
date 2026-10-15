@@ -1,12 +1,12 @@
 /*=============== CONFIG ===============*/
-// Alamat Web App Google Apps Script (untuk penyimpanan terpusat di Google Sheets).
-// Kosongkan "" untuk mode lokal: data hanya tersimpan di perangkat ini.
+// Alamat Web App Google Apps Script (penyimpanan terpusat di Google Sheets + Sign In).
+// Kosongkan "" untuk mode lokal: tanpa login, data hanya tersimpan di perangkat ini.
 const API_URL = "https://script.google.com/macros/s/AKfycbzCZJsPYjRp_Xh-5j3QVsXz6SLAuiURxowcLbPdeV2P7vZvF9F7tgSqtu587FwzS0e_/exec"
 
 // Foto kartu indikator: isi dengan nama file foto yang satu folder dengan index.html.
 // Urutan: Bersih, Asri, Rindang, Indah, Sehat, Aman, Nyaman. Kosongkan "" untuk foto bawaan.
 // Contoh: ["bersih.jpg", "asri.jpg", "rindang.jpg", "indah.jpg", "sehat.jpg", "aman.jpg", "nyaman.jpg"]
-const FOTO_INDIKATOR = ["BERSIH1.jpeg", "ASRI.jpeg", "RINDANG.jpeg", "INDAH.jpeg", "SEHAT.jpeg", "AMAN1.jpeg", "NYAMAN.jpeg"]
+const FOTO_INDIKATOR = ["", "", "", "", "", "", ""]
 
 // Daftar indikator: [nama, satuan, foto bawaan]
 const INDIKATOR = [
@@ -62,11 +62,13 @@ const linkAction = () =>{
 navLink.forEach(n => n.addEventListener('click', linkAction))
 
 /*=============== DARK LIGHT THEME ===============*/
-const themeButton = $('#theme-button')
+const themeButtons = $$('.js-theme')
 
 const setTheme = (theme) =>{
     document.documentElement.dataset.theme = theme
-    themeButton.innerHTML = `<svg class="i"><use href="#${theme === 'dark' ? 'sun' : 'moon'}"/></svg>`
+    themeButtons.forEach(button =>{
+        button.innerHTML = `<svg class="i"><use href="#${theme === 'dark' ? 'sun' : 'moon'}"/></svg>`
+    })
 }
 
 // Previously selected theme (if user selected)
@@ -75,11 +77,11 @@ try{ selectedTheme = localStorage.getItem('theme') }catch(e){}
 setTheme(selectedTheme || 'light')
 
 // Active / deactive the theme manually with the button
-themeButton.addEventListener('click', () =>{
+themeButtons.forEach(button => button.addEventListener('click', () =>{
     const theme = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark'
     setTheme(theme)
     try{ localStorage.setItem('theme', theme) }catch(e){}
-})
+}))
 
 /*=============== SLIDER HOME & TESTIMONIAL ===============*/
 const initSlider = (slider) =>{
@@ -180,7 +182,7 @@ if('IntersectionObserver' in window){
     revealItems.forEach(item => item.classList.add('in'))
 }
 
-/*=============== DATA STORAGE ===============*/
+/*=============== DATA STORAGE (LOCAL MODE) ===============*/
 const loadLocal = () =>{
     try{ return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [] }
     catch(e){ return memoryData }
@@ -199,6 +201,82 @@ const saveReports = (list) =>{
     if(!CENTRAL) saveLocal(list)
 }
 
+/*=============== SIGN IN SESSION ===============*/
+const SESSION_KEY = 'si-barisan-session'
+const STORES = ['sessionStorage', 'localStorage']
+let session = null // {token, user}
+
+const readSession = () =>{
+    for(const name of STORES){
+        try{
+            const saved = JSON.parse(window[name].getItem(SESSION_KEY))
+            if(saved && saved.token && saved.user) return saved
+        }catch(e){}
+    }
+    return null
+}
+
+const clearSession = () =>{
+    STORES.forEach(name =>{
+        try{ window[name].removeItem(SESSION_KEY) }catch(e){}
+    })
+}
+
+const writeSession = (data, remember) =>{
+    clearSession()
+    try{ window[remember ? 'localStorage' : 'sessionStorage'].setItem(SESSION_KEY, JSON.stringify(data)) }catch(e){}
+}
+
+const isAdmin = () => Boolean(session && session.user && session.user.peran === 'admin')
+
+// Local mode has no accounts, so everything can be deleted. Central mode: admin only.
+const canDelete = () => !CENTRAL || isAdmin()
+
+/*=============== SIGN IN PAGE ===============*/
+const loginForm = $('#login-form'),
+      loginUser = $('#login-user'),
+      loginPass = $('#login-pass'),
+      loginRemember = $('#login-remember'),
+      loginButton = $('#login-button'),
+      loginMessage = $('#login-msg'),
+      passToggle = $('#pass-toggle'),
+      navUser = $('#nav-user'),
+      logoutButton = $('#logout-button')
+
+const showLoginMessage = (text, success) =>{
+    loginMessage.textContent = text
+    loginMessage.style.color = success ? '#1f8a5b' : '#d64545'
+}
+
+const setLoginBusy = (busy) =>{
+    loginButton.disabled = busy
+    loginUser.disabled = busy
+    loginPass.disabled = busy
+}
+
+const lockApp = () =>{
+    document.body.classList.add('locked')
+    window.scrollTo(0, 0)
+}
+
+const unlockApp = () =>{
+    document.body.classList.remove('locked')
+}
+
+const loginError = (err) =>{
+    if(err instanceof TypeError) return 'Tidak dapat terhubung ke server. Periksa koneksi internet.'
+    if(err instanceof SyntaxError) return 'Jawaban server tidak dikenali. Pastikan deployment Apps Script sudah versi terbaru.'
+    return err.message || 'Gagal masuk.'
+}
+
+/* Show / hide password */
+passToggle.addEventListener('click', () =>{
+    const show = loginPass.type === 'password'
+    loginPass.type = show ? 'text' : 'password'
+    passToggle.setAttribute('aria-label', show ? 'Sembunyikan password' : 'Tampilkan password')
+    passToggle.innerHTML = `<svg class="i"><use href="#${show ? 'eye-off' : 'eye'}"/></svg>`
+})
+
 /*=============== GOOGLE SHEETS (CENTRAL MODE) ===============*/
 const statusText = $('#stat')
 
@@ -206,12 +284,30 @@ const setStatus = (text) =>{
     statusText.textContent = text
 }
 
+// Session is no longer valid (expired, signed out): back to the Sign In page
+const expireSession = (text, success) =>{
+    session = null
+    clearSession()
+    reports = []
+    render()
+    setStatus('')
+    lockApp()
+    showLoginMessage(text || 'Sesi berakhir. Silakan masuk lagi.', Boolean(success))
+}
+
 const callApi = (body) =>{
+    const payload = session ? {...body, token: session.token} : body
+
     return fetch(API_URL, {
         method: 'POST',
         headers: {'Content-Type': 'text/plain;charset=utf-8'},
-        body: JSON.stringify(body)
-    }).then(res => res.json())
+        body: JSON.stringify(payload)
+    })
+        .then(res => res.json())
+        .then(json =>{
+            if(json && json.auth && session) expireSession(json.error)
+            return json
+        })
 }
 
 const normalize = (row) =>({
@@ -223,26 +319,90 @@ const normalize = (row) =>({
     ind: Number(row.ind),
     tg: parseFloat(row.tg),
     rl: parseFloat(row.rl),
-    cat: String(row.cat || '')
+    cat: String(row.cat || ''),
+    by: String(row.by || '')
 })
 
+// Returns true when the data was loaded
 const refresh = () =>{
-    if(!CENTRAL) return Promise.resolve()
+    if(!CENTRAL || !session) return Promise.resolve(false)
 
     setStatus('Memuat data dari Google Sheets...')
-    return fetch(API_URL + '?action=list')
-        .then(res => res.json())
+    return callApi({action: 'list'})
         .then(json =>{
+            if(json.auth) throw new Error('auth')
             if(!json.ok) throw new Error('Gagal memuat')
             reports = json.data.map(normalize).filter(r => r.ind >= 0 && r.ind < INDIKATOR.length && r.tg > 0 && !isNaN(r.rl))
             render()
             const time = new Date().toLocaleTimeString('id-ID', {hour: '2-digit', minute: '2-digit'})
             setStatus(`Terhubung ke Google Sheets. Diperbarui ${time}.`)
+            return true
         })
-        .catch(() =>{
-            setStatus('Gagal memuat data dari Google Sheets. Periksa koneksi atau alamat Apps Script.')
+        .catch(err =>{
+            if(err.message !== 'auth') setStatus('Gagal memuat data dari Google Sheets. Periksa koneksi atau alamat Apps Script.')
+            return false
         })
 }
+
+// Fill region and work unit from the signed-in account (can still be edited)
+const fillProfile = () =>{
+    if(CENTRAL && session){
+        $('#wil').value = session.user.wilayah || ''
+        $('#sk').value = session.user.satker || ''
+    }
+}
+
+const applyUser = () =>{
+    if(!session) return
+    navUser.textContent = `${session.user.nama} (${isAdmin() ? 'Admin' : 'Operator'})`
+    fillProfile()
+    render()
+}
+
+/* Sign in */
+loginForm.addEventListener('submit', e =>{
+    e.preventDefault()
+
+    const username = loginUser.value.trim(),
+          password = loginPass.value
+
+    if(!username || !password){
+        showLoginMessage('Isi username dan password.', false)
+        return
+    }
+    if(!CENTRAL) return
+
+    setLoginBusy(true)
+    showLoginMessage('Memeriksa akun...', true)
+
+    callApi({action: 'login', username, password})
+        .then(res =>{
+            if(!res.ok) throw new Error(res.error || 'Gagal masuk.')
+            session = {token: res.token, user: res.user}
+            writeSession(session, loginRemember.checked)
+            loginPass.value = ''
+            return refresh()
+        })
+        .then(loaded =>{
+            if(!loaded){
+                session = null
+                clearSession()
+                throw new Error('Berhasil masuk, tetapi data gagal dimuat. Silakan coba lagi.')
+            }
+            showLoginMessage('', true)
+            unlockApp()
+            applyUser()
+        })
+        .catch(err => showLoginMessage(loginError(err), false))
+        .finally(() => setLoginBusy(false))
+})
+
+/* Sign out */
+logoutButton.addEventListener('click', () =>{
+    if(!confirm('Keluar dari Si-Barisan?')) return
+    callApi({action: 'logout'}).catch(() =>{})
+    expireSession('Anda sudah keluar.', true)
+})
 
 /*=============== HELPERS ===============*/
 const escapeHtml = (text) =>{
@@ -325,17 +485,18 @@ const render = () =>{
     /* Report table */
     $('#tb').innerHTML = reports.slice().sort((a, b) => b.tgl.localeCompare(a.tgl)).map(r =>{
         const p = percent(r.rl, r.tg),
-              indikator = INDIKATOR[r.ind]
+              indikator = INDIKATOR[r.ind],
+              by = r.by ? ' &middot; oleh ' + escapeHtml(r.by) : ''
 
         return `
             <tr>
                 <td>${escapeHtml(r.tgl)}</td>
-                <td><b>${escapeHtml(r.nama)}</b><br><small>${escapeHtml(r.sk)}${r.cat ? ' &middot; ' + escapeHtml(r.cat) : ''}</small></td>
+                <td><b>${escapeHtml(r.nama)}</b><br><small>${escapeHtml(r.sk)}${r.cat ? ' &middot; ' + escapeHtml(r.cat) : ''}${by}</small></td>
                 <td>${escapeHtml(r.wil)}</td>
                 <td>${escapeHtml(indikator[0])}</td>
                 <td>${r.rl} / ${r.tg} ${indikator[1]}</td>
                 <td><span class="pill${pillClass(p)}">${p}%</span></td>
-                <td><button class="button line" data-id="${escapeHtml(r.id)}">Hapus</button></td>
+                <td>${canDelete() ? `<button class="button line" data-id="${escapeHtml(r.id)}">Hapus</button>` : ''}</td>
             </tr>`
     }).join('')
 
@@ -376,13 +537,14 @@ form.addEventListener('submit', e =>{
         showMessage('Menyimpan ke Google Sheets...', true)
         callApi({action: 'add', row: report})
             .then(res =>{
-                if(!res.ok) throw new Error('Gagal menyimpan')
+                if(res.auth) return
+                if(!res.ok) throw new Error(res.error || 'Gagal menyimpan')
                 form.reset()
+                fillProfile()
                 updateUnit()
-                return refresh()
+                return refresh().then(() => showMessage('Laporan tersimpan di Google Sheets.', true))
             })
-            .then(() => showMessage('Laporan tersimpan di Google Sheets.', true))
-            .catch(() => showMessage('Gagal menyimpan. Periksa koneksi atau alamat Apps Script.', false))
+            .catch(err => showMessage(err instanceof TypeError ? 'Gagal menyimpan. Periksa koneksi internet.' : (err.message || 'Gagal menyimpan.'), false))
         return
     }
 
@@ -397,20 +559,18 @@ form.addEventListener('submit', e =>{
 /*=============== DELETE REPORT ===============*/
 $('#tb').addEventListener('click', e =>{
     const button = e.target.closest('[data-id]')
-    if(!button || !confirm('Hapus laporan ini?')) return
+    if(!button || !canDelete() || !confirm('Hapus laporan ini?')) return
 
     const id = button.dataset.id
 
     if(CENTRAL){
-        const pin = prompt('Masukkan PIN admin untuk menghapus laporan:')
-        if(!pin) return
-
-        callApi({action: 'delete', id, pin})
+        callApi({action: 'delete', id})
             .then(res =>{
-                if(!res.ok) throw new Error('Gagal menghapus')
+                if(res.auth) return
+                if(!res.ok) throw new Error(res.error || 'Gagal menghapus')
                 return refresh()
             })
-            .catch(() => alert('Gagal menghapus. PIN salah atau koneksi bermasalah.'))
+            .catch(err => alert(err instanceof TypeError ? 'Gagal menghapus. Periksa koneksi internet.' : (err.message || 'Gagal menghapus.')))
         return
     }
 
@@ -450,7 +610,8 @@ $('#demo').addEventListener('click', () =>{
         rl: item[5],
         tgl: today,
         cat: 'Contoh data',
-        id: String(now + i)
+        id: String(now + i),
+        by: ''
     }))
 
     saveReports([...reports, ...samples])
@@ -471,16 +632,16 @@ $('#csv').addEventListener('click', () =>{
         return
     }
 
-    const header = ['Tanggal', 'Kegiatan', 'Wilayah', 'Satuan Kerja', 'Indikator', 'Target', 'Realisasi', 'Capaian (%)', 'Catatan']
+    const header = ['Tanggal', 'Kegiatan', 'Wilayah', 'Satuan Kerja', 'Indikator', 'Target', 'Realisasi', 'Capaian (%)', 'Catatan', 'Diinput Oleh']
     const rows = reports.map(r => [
-        r.tgl, r.nama, r.wil, r.sk, INDIKATOR[r.ind][0], r.tg, r.rl, percent(r.rl, r.tg), r.cat
+        r.tgl, r.nama, r.wil, r.sk, INDIKATOR[r.ind][0], r.tg, r.rl, percent(r.rl, r.tg), r.cat, r.by || ''
     ])
 
     const csv = [header, ...rows].map(row => row.map(csvCell).join(',')).join('\r\n')
 
     const link = document.createElement('a')
     link.href = URL.createObjectURL(new Blob(['\ufeff' + csv], {type: 'text/csv;charset=utf-8'}))
-    link.download = 'b-sipakainge-monev.csv'
+    link.download = 'si-barisan.csv'
     document.body.appendChild(link)
     link.click()
     link.remove()
@@ -495,11 +656,33 @@ if(CENTRAL){
     $('#rf').addEventListener('click', refresh)
 
     setInterval(() =>{
-        if(!document.hidden) refresh()
+        if(!document.hidden && session) refresh()
     }, 60000)
 
-    refresh()
+    // Continue a previous session if it is still valid
+    session = readSession()
+    if(session){
+        setLoginBusy(true)
+        showLoginMessage('Memeriksa sesi...', true)
+
+        refresh().then(loaded =>{
+            setLoginBusy(false)
+            if(loaded){
+                showLoginMessage('', true)
+                unlockApp()
+                applyUser()
+            }else if(session){
+                // could not reach the server: ask to sign in again
+                session = null
+                showLoginMessage('Tidak dapat memeriksa sesi. Periksa koneksi, lalu masuk lagi.', false)
+            }
+        })
+    }
 }else{
+    // Local mode: no accounts, open the app directly
+    unlockApp()
+    logoutButton.style.display = 'none'
+    navUser.style.display = 'none'
     setStatus('Mode lokal: data hanya tersimpan di perangkat ini.')
 }
 
